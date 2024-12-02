@@ -20,16 +20,12 @@ def get_video_info(file_path):
         print(f"Erro ao analisar {file_path}: {e}")
         return None
 
-def encode_video(input_file, output_file, target_quality=35):
-    """Re-encoda o vídeo com nvenc_hevc ajustando a qualidade constante (cq)."""
-    if not (0 <= target_quality <= 51):
-        print(f"Erro: Valor de qualidade constante (cq) deve estar entre 0 e 51. Valor recebido: {target_quality}")
-        return
-
+def encode_video(input_file, output_file, target_quality=35, codec="hevc_nvenc"):
+    """Re-encoda o vídeo com o codec especificado."""
     command = [
         "ffmpeg",
         "-i", input_file,
-        "-c:v", "hevc_nvenc",
+        "-c:v", codec,
         "-cq", str(target_quality),    # Define o nível de qualidade constante
         "-preset", "slow",             # Melhor compressão
         "-c:a", "copy",                # Mantém o áudio original
@@ -37,13 +33,27 @@ def encode_video(input_file, output_file, target_quality=35):
     ]
     try:
         subprocess.run(command, check=True)
-        print(f"Arquivo processado: {output_file}")
+        print(f"Arquivo processado com {codec}: {output_file}")
     except subprocess.CalledProcessError as e:
-        print(f"Erro ao processar {input_file}: {e}")
+        print(f"Erro ao processar {input_file} com {codec}: {e}")
 
 def process_videos_in_folder(folder_path):
     """Analisa e processa vídeos na pasta."""
+    print("Escolha o codec para compressão:")
+    print("1. HEVC (H.265, hevc_nvenc)")
+    print("2. AV1 (av1_nvenc)")
+    codec_choice = input("Digite o número correspondente (1 ou 2): ").strip()
+    
+    if codec_choice == "1":
+        codec = "hevc_nvenc"
+    elif codec_choice == "2":
+        codec = "av1_nvenc"
+    else:
+        print("Opção inválida. Por favor, execute o script novamente e escolha 1 ou 2.")
+        return
+
     target_quality = int(input("Escolha a qualidade constante (0-51, onde maior é menor qualidade, recomendado: 35): "))
+
     for root, _, files in os.walk(folder_path):
         for file in files:
             if file.lower().endswith(('.mp4', '.mkv', '.avi', '.mov')):
@@ -71,7 +81,7 @@ def process_videos_in_folder(folder_path):
                 if bitrate > target_bitrate:
                     print(f"Arquivo {file} pode ser reduzido (Bitrate atual: {bitrate} kbps, Alvo: {target_bitrate} kbps).")
                     output_file = os.path.join(root, f"encoded_{file}")
-                    encode_video(file_path, output_file, target_quality=target_quality)
+                    encode_video(file_path, output_file, target_quality=target_quality, codec=codec)
                 else:
                     print(f"Arquivo {file} já está otimizado (Bitrate atual: {bitrate} kbps).")
 
