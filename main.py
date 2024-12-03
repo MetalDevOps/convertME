@@ -23,13 +23,16 @@ def get_video_info(file_path):
         result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
         video_info = json.loads(result.stdout)
 
+        # Obtém o bitrate em bps e converte para kbps
         bit_rate = video_info.get('streams', [{}])[0].get('bit_rate', 0)
+        bit_rate = int(bit_rate) // 1000 if bit_rate else 0  # Converte para kbps
+
         width = video_info.get('streams', [{}])[0].get('width', 0)
         height = video_info.get('streams', [{}])[0].get('height', 0)
         duration = float(video_info.get('format', {}).get('duration', 0))
 
         return {
-            'bit_rate': int(bit_rate) if bit_rate else 0,
+            'bit_rate': bit_rate,  # Bitrate agora está em kbps
             'width': width,
             'height': height,
             'duration': duration
@@ -50,7 +53,7 @@ def encode_video(input_file, temp_file, target_quality=35, codec="hevc_nvenc"):
         "-i", input_file,
         "-c:v", codec,
         "-cq", str(target_quality),
-        "-preset", "fast",
+        "-preset", "slow",
         "-c:a", "copy",
         "-f", "mp4",
         temp_file
