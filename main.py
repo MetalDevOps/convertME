@@ -273,14 +273,12 @@ def convert_video(
     with progress_lock:
         progress_data["completed"] += 1
         progress_data["completed_size"] += os.path.getsize(file_path)
+        progress_data["total_saved_space"] += original_size - converted_size
         remaining_time = calculate_time_remaining(progress_data)
-
-        # Adiciona flush ao logger
-        log_message = f"Progresso: {progress_data['completed']}/{progress_data['total']} arquivos convertidos."
-        logging.info(log_message)
+        logging.info(
+            f"Progresso: {progress_data['completed']}/{progress_data['total']} arquivos convertidos."
+        )
         logging.info(f"Tempo restante estimado: {format_timedelta(remaining_time)}")
-        for handler in logging.getLogger().handlers:
-            handler.flush()
 
 
 def main():
@@ -315,6 +313,7 @@ def main():
         "start_time": time.time(),
         "total_size": sum(os.path.getsize(file) for file in valid_files),
         "completed_size": 0,
+        "total_saved_space": 0,
     }
 
     progress_lock = Lock()
@@ -330,6 +329,14 @@ def main():
                 progress_data,
                 progress_lock,
             )
+
+    # Exibição do resumo
+    total_time = time.time() - progress_data["start_time"]
+    total_saved_mb = progress_data["total_saved_space"] / (1024 * 1024)
+    logging.info("\nResumo Final:")
+    logging.info(f"Total de arquivos processados: {progress_data['completed']}")
+    logging.info(f"Economia total de espaço: {total_saved_mb:.2f} MB")
+    logging.info(f"Tempo total gasto: {format_timedelta(total_time)}")
 
 
 if __name__ == "__main__":
