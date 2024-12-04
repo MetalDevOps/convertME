@@ -26,6 +26,22 @@ MAX_WORKERS = 4  # Quantidade máxima de threads simultâneas
 mimetypes.init()
 
 
+def monitor_gpu_usage():
+    """Monitora o uso de GPU e retorna True se o uso ultrapassar 85%."""
+    try:
+        import pynvml
+
+        pynvml.nvmlInit()
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+        utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+        logging.debug(f"Uso da GPU: {utilization.gpu}%")
+        # Retorna True se o uso da GPU for superior a 85%
+        return int(utilization.gpu) > 85
+    except Exception as e:
+        logging.warning(f"Erro ao monitorar GPU: {e}")
+        return False
+
+
 def format_timedelta(seconds):
     """Converte segundos em formato HH:MM:SS."""
     delta = timedelta(seconds=int(seconds))
@@ -205,7 +221,9 @@ def encode_video(input_file, output_file, target_quality, codec):
         output_file,
     ]
     try:
-        with open(f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w") as log_file:
+        with open(
+            f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w"
+        ) as log_file:
             subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
         return True
     except subprocess.CalledProcessError as e:
@@ -226,7 +244,9 @@ def calculate_time_remaining(progress_data):
     return avg_time_per_byte * remaining_size
 
 
-def convert_video(file_path, codec, target_quality, temp_folder, progress_data, progress_lock):
+def convert_video(
+    file_path, codec, target_quality, temp_folder, progress_data, progress_lock
+):
     """Executa a conversão de um único arquivo."""
     file_name = os.path.basename(file_path)
     logging.info(f"Iniciando a conversão de {file_name}...")
@@ -321,7 +341,13 @@ def main():
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for file_path in valid_files:
             executor.submit(
-                convert_video, file_path, codec, target_quality, temp_folder, progress_data, progress_lock
+                convert_video,
+                file_path,
+                codec,
+                target_quality,
+                temp_folder,
+                progress_data,
+                progress_lock,
             )
 
     # Exibição do resumo
