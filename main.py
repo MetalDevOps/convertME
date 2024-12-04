@@ -4,23 +4,32 @@ import sqlite3
 import time
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from threading import Lock
+from datetime import datetime, timedelta
 from colorama import Fore, Style
 
 # Configuração de logs
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler(), logging.FileHandler("video_conversion.log")],
 )
 
 DATABASE_FILE = "video_conversion.db"
 TEMP_FOLDER_NAME = "_temp"
+FFMPEG_LOG_FOLDER = "ffmpeg_output"
 DEFAULT_QUALITY = 35
 DEFAULT_CODEC = "hevc_nvenc"
+MAX_WORKERS = 2  # Quantidade máxima de threads simultâneas
 
 # Inicializa tipos MIME
 mimetypes.init()
+
+
+def format_timedelta(seconds):
+    """Converte segundos em formato HH:MM:SS."""
+    delta = timedelta(seconds=int(seconds))
+    return str(delta)
 
 
 def init_database():
@@ -196,7 +205,9 @@ def encode_video(input_file, output_file, target_quality, codec):
         output_file,
     ]
     try:
-        with open(f"ffmpeg_output/{os.path.basename(input_file)}.log", "w") as log_file:
+        with open(
+            f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w"
+        ) as log_file:
             subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
         return True
     except subprocess.CalledProcessError as e:
@@ -204,7 +215,22 @@ def encode_video(input_file, output_file, target_quality, codec):
         return False
 
 
-def convert_video(file_path, codec, target_quality, temp_folder):
+def calculate_time_remaining(progress_data):
+    """Calcula o tempo restante baseado no tamanho dos arquivos restantes."""
+    completed_size = progress_data["completed_size"]
+    elapsed_time = time.time() - progress_data["start_time"]
+
+    if completed_size == 0:
+        return float("inf")  # Não podemos estimar sem progresso
+
+    avg_time_per_byte = elapsed_time / completed_size
+    remaining_size = progress_data["total_size"] - completed_size
+    return avg_time_per_byte * remaining_size
+
+
+def convert_video(
+    file_path, codec, target_quality, temp_folder, progress_data, progress_lock
+):
     """Executa a conversão de um único arquivo."""
     file_name = os.path.basename(file_path)
     logging.info(f"Iniciando a conversão de {file_name}...")
@@ -243,6 +269,19 @@ def convert_video(file_path, codec, target_quality, temp_folder):
     elapsed_time = time.time() - start_time
     logging.info(f"Tempo gasto para {file_name}: {elapsed_time:.2f} segundos.")
 
+    # Atualiza progresso com lock
+    with progress_lock:
+        progress_data["completed"] += 1
+        progress_data["completed_size"] += os.path.getsize(file_path)
+        remaining_time = calculate_time_remaining(progress_data)
+
+        # Adiciona flush ao logger
+        log_message = f"Progresso: {progress_data['completed']}/{progress_data['total']} arquivos convertidos."
+        logging.info(log_message)
+        logging.info(f"Tempo restante estimado: {format_timedelta(remaining_time)}")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+
 
 def main():
     print(f"{Fore.CYAN}Bem-vindo ao conversor de vídeos!{Style.RESET_ALL}")
@@ -263,17 +302,33 @@ def main():
         ).strip()
     )
 
-    os.makedirs("ffmpeg_output", exist_ok=True)
+    os.makedirs(FFMPEG_LOG_FOLDER, exist_ok=True)
 
     valid_files = analyze_folder(folder_path, recursive)
 
     temp_folder = os.path.join(folder_path, TEMP_FOLDER_NAME)
     os.makedirs(temp_folder, exist_ok=True)
 
-    with ThreadPoolExecutor() as executor:
+    progress_data = {
+        "total": len(valid_files),
+        "completed": 0,
+        "start_time": time.time(),
+        "total_size": sum(os.path.getsize(file) for file in valid_files),
+        "completed_size": 0,
+    }
+
+    progress_lock = Lock()
+
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for file_path in valid_files:
             executor.submit(
-                convert_video, file_path, codec, target_quality, temp_folder
+                convert_video,
+                file_path,
+                codec,
+                target_quality,
+                temp_folder,
+                progress_data,
+                progress_lock,
             )
 
 
