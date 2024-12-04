@@ -262,9 +262,16 @@ def convert_video(
             (1 - converted_size / original_size) * 100 if original_size > 0 else 0
         )
 
+        # Preservar timestamps
+        original_creation_time = os.path.getctime(file_path)
+        original_modification_time = os.path.getmtime(file_path)
+
         output_file = os.path.splitext(file_path)[0] + ".mp4"
         os.remove(file_path)
         os.replace(temp_file, output_file)
+
+        # Atualizar timestamps
+        os.utime(output_file, (original_creation_time, original_modification_time))
 
         update_converted_file(
             file_path, output_file, original_size, converted_size, reduction_percentage
