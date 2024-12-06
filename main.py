@@ -20,26 +20,10 @@ TEMP_FOLDER_NAME = "_temp"
 FFMPEG_LOG_FOLDER = "ffmpeg_output"
 DEFAULT_QUALITY = 35
 DEFAULT_CODEC = "hevc_nvenc"
-MAX_WORKERS = 4  # Quantidade máxima de threads simultâneas
+MAX_WORKERS = 2  # Quantidade máxima de threads simultâneas
 
 # Inicializa tipos MIME
 mimetypes.init()
-
-
-def monitor_gpu_usage():
-    """Monitora o uso de GPU e retorna True se o uso ultrapassar 85%."""
-    try:
-        import pynvml
-
-        pynvml.nvmlInit()
-        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
-        logging.debug(f"Uso da GPU: {utilization.gpu}%")
-        # Retorna True se o uso da GPU for superior a 85%
-        return int(utilization.gpu) > 85
-    except Exception as e:
-        logging.warning(f"Erro ao monitorar GPU: {e}")
-        return False
 
 
 def format_timedelta(seconds):
@@ -221,9 +205,7 @@ def encode_video(input_file, output_file, target_quality, codec):
         output_file,
     ]
     try:
-        with open(
-            f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w"
-        ) as log_file:
+        with open(f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w") as log_file:
             subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
         return True
     except subprocess.CalledProcessError as e:
@@ -244,9 +226,7 @@ def calculate_time_remaining(progress_data):
     return avg_time_per_byte * remaining_size
 
 
-def convert_video(
-    file_path, codec, target_quality, temp_folder, progress_data, progress_lock
-):
+def convert_video(file_path, codec, target_quality, temp_folder, progress_data, progress_lock):
     """Executa a conversão de um único arquivo."""
     file_name = os.path.basename(file_path)
     logging.info(f"Iniciando a conversão de {file_name}...")
@@ -278,7 +258,6 @@ def convert_video(
         )
 
         space_saved = original_size - converted_size
-        space_saved_mb = space_saved / (1024 * 1024)
 
         # Atualiza progresso com lock
         with progress_lock:
@@ -287,15 +266,13 @@ def convert_video(
             progress_data["total_saved_space"] += space_saved
             remaining_time = calculate_time_remaining(progress_data)
 
-            log_message = f"Progresso: {progress_data['completed']}/{progress_data['total']} arquivos convertidos."
-            logging.info(log_message)
+            logging.info(
+                f"Progresso: {progress_data['completed']}/{progress_data['total']} arquivos convertidos."
+            )
             logging.info(f"Tempo restante estimado: {format_timedelta(remaining_time)}")
 
-            for handler in logging.getLogger().handlers:
-                handler.flush()
-
         logging.info(
-            f"Arquivo {file_name} convertido com sucesso! Economia de espaço: {space_saved_mb:.2f} MB ({reduction_percentage:.2f}%)"
+            f"Arquivo {file_name} convertido com sucesso! Economia de espaço: {space_saved / (1024 * 1024):.2f} MB ({reduction_percentage:.2f}%)"
         )
     else:
         if os.path.exists(temp_file):
@@ -360,7 +337,7 @@ def main():
     # Exibição do resumo
     total_time = time.time() - progress_data["start_time"]
     total_saved_mb = progress_data["total_saved_space"] / (1024 * 1024)
-    logging.info("\nResumo Final:")
+    logging.info(f"\nResumo Final:")
     logging.info(f"Total de arquivos processados: {progress_data['completed']}")
     logging.info(f"Economia total de espaço: {total_saved_mb:.2f} MB")
     logging.info(f"Tempo total gasto: {format_timedelta(total_time)}")
