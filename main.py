@@ -182,6 +182,41 @@ def analyze_folder(folder_path, recursive=False):
     return valid_files
 
 
+def monitor_gpu_usage():
+    """Monitora o uso de GPU e retorna True se o uso ultrapassar 85%."""
+    try:
+        import pynvml
+
+        # Inicializa a biblioteca NVML
+        pynvml.nvmlInit()
+
+        # Obtém o handle da primeira GPU (índice 0)
+        handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+
+        # Obtém os dados de utilização da GPU
+        utilization = pynvml.nvmlDeviceGetUtilizationRates(handle)
+
+        # Loga a utilização da GPU e memória
+        logging.debug(
+            f"Uso da GPU: {utilization.gpu}%, Uso da Memória: {utilization.memory}%"
+        )
+
+        # Retorna True se o uso da GPU for superior a 85%
+        return utilization.gpu > 85
+
+    except pynvml.NVMLError as e:
+        # Loga o erro caso a NVML não esteja disponível ou encontre um problema
+        logging.warning(f"Erro ao monitorar GPU: {e}")
+        return False
+
+    except ImportError:
+        # Caso a biblioteca pynvml não esteja instalada, loga um aviso
+        logging.warning(
+            "A biblioteca 'pynvml' não está instalada. Monitoração de GPU desativada."
+        )
+        return False
+
+
 def encode_video(input_file, output_file, target_quality, codec):
     """Realiza a conversão de vídeo usando ffmpeg."""
     import subprocess
@@ -205,7 +240,9 @@ def encode_video(input_file, output_file, target_quality, codec):
         output_file,
     ]
     try:
-        with open(f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w") as log_file:
+        with open(
+            f"{FFMPEG_LOG_FOLDER}/{os.path.basename(input_file)}.log", "w"
+        ) as log_file:
             subprocess.run(cmd, check=True, stdout=log_file, stderr=subprocess.STDOUT)
         return True
     except subprocess.CalledProcessError as e:
@@ -226,7 +263,9 @@ def calculate_time_remaining(progress_data):
     return avg_time_per_byte * remaining_size
 
 
-def convert_video(file_path, codec, target_quality, temp_folder, progress_data, progress_lock):
+def convert_video(
+    file_path, codec, target_quality, temp_folder, progress_data, progress_lock
+):
     """Executa a conversão de um único arquivo."""
     file_name = os.path.basename(file_path)
     logging.info(f"Iniciando a conversão de {file_name}...")
