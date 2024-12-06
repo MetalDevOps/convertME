@@ -202,7 +202,7 @@ def monitor_gpu_usage():
         )
 
         # Retorna True se o uso da GPU for superior a 85%
-        return utilization.gpu > 85
+        return int(utilization.gpu) > 85
 
     except pynvml.NVMLError as e:
         # Loga o erro caso a NVML não esteja disponível ou encontre um problema
@@ -269,6 +269,12 @@ def convert_video(
     """Executa a conversão de um único arquivo."""
     file_name = os.path.basename(file_path)
     logging.info(f"Iniciando a conversão de {file_name}...")
+    # Verifica o uso da GPU antes de configurar o codec
+    if codec == "hevc_nvenc" or codec == "av1_nvenc":
+        if monitor_gpu_usage():
+            logging.info(f"Uso da GPU acima de 85%. Alternando para codec baseado em CPU (libsvtav1).")
+            codec = "libsvtav1"
+
     start_time = time.time()
 
     temp_file = os.path.join(temp_folder, os.path.splitext(file_name)[0] + ".mp4")
